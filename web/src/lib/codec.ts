@@ -25,8 +25,20 @@ export interface VoiceCodec {
 }
 
 const SAMPLE_RATE = 16000 // voice-grade; matches Codec2's typical operating rate
-const CHANNELS = 1
 const PLACEHOLDER_BITRATE = 6000 // bps — Opus's practical floor; real Codec2 target is 700-1200 bps
+
+export interface CodecFormat {
+  sampleRate: number
+  numberOfChannels: number
+  // Duration, in microseconds, of the AudioData chunks that will actually be
+  // fed to encode(). Opus's AudioEncoder rejects a chunk whose duration
+  // doesn't match its configured frame size ("incompatible with codec
+  // parameters") — this must reflect what MediaStreamTrackProcessor is
+  // really handing back (observed as 480 samples/10ms @ 48kHz on real
+  // hardware), not the 20ms textbook default for voice codecs. Only matters
+  // for encode(); decode-only callers (PushToTalkPlayer) can omit it.
+  frameDurationUs?: number
+}
 
 export class PlaceholderLowBitrateCodec implements VoiceCodec {
   private encoder: AudioEncoder
@@ -34,7 +46,13 @@ export class PlaceholderLowBitrateCodec implements VoiceCodec {
   private pendingEncoded: EncodedFrame[] = []
   private pendingDecoded: AudioData[] = []
 
-  constructor() {
+  // Takes the actual capture/playback format rather than assuming SAMPLE_RATE
+  // everywhere: getUserMedia's sampleRate/channelCount constraints are hints,
+  // not guarantees, and mic hardware that can't produce 16kHz mono hands back
+  // its native format instead — configuring Opus for anything else then
+  // makes encode() reject every frame with "incompatible with codec
+  // parameters".
+  constructor(format: CodecFormat) {
     this.encoder = new AudioEncoder({
       output: (chunk) => {
         const data = new Uint8Array(chunk.byteLength)
@@ -45,17 +63,21 @@ export class PlaceholderLowBitrateCodec implements VoiceCodec {
     })
     this.encoder.configure({
       codec: 'opus',
-      sampleRate: SAMPLE_RATE,
-      numberOfChannels: CHANNELS,
+      sampleRate: format.sampleRate,
+      numberOfChannels: format.numberOfChannels,
       bitrate: PLACEHOLDER_BITRATE,
-      opus: { frameDuration: 20000 }, // 20ms frames, standard for voice
+      opus: { frameDuration: format.frameDurationUs ?? 20000 },
     })
 
     this.decoder = new AudioDecoder({
       output: (audioData) => this.pendingDecoded.push(audioData),
       error: (e) => console.error('[codec] decoder error', e),
     })
-    this.decoder.configure({ codec: 'opus', sampleRate: SAMPLE_RATE, numberOfChannels: CHANNELS })
+    this.decoder.configure({
+      codec: 'opus',
+      sampleRate: format.sampleRate,
+      numberOfChannels: format.numberOfChannels,
+    })
   }
 
   async encode(chunk: AudioData): Promise<EncodedFrame[]> {
