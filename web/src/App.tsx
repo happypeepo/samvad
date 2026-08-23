@@ -39,7 +39,7 @@ export default function App() {
 
   // --- BLE tier state ---
   const [blePeers, setBlePeers] = useState<BlePeer[]>([])
-  const [bleRole, setBleRole] = useState<'both' | 'peripheral' | 'central'>('both')
+  const [bleRole, setBleRole] = useState<'both' | 'peripheral' | 'central'>('central') // TEMP: reliable config for this device pair
   const bleTierRef = useRef<BleTier | null>(null)
   const pttRecorderRef = useRef<PushToTalkRecorder | null>(null)
   const pttPlayersRef = useRef<Map<string, PushToTalkPlayer>>(new Map())
@@ -163,9 +163,19 @@ export default function App() {
   }
 
   async function startPtt(peer: BlePeer) {
-    const recorder = new PushToTalkRecorder((bytes) => peer.sendVoiceFrame(bytes))
+    if (pttRecorderRef.current) return // already recording — ignore a duplicate press
+    const recorder = new PushToTalkRecorder(
+      (bytes) => peer.sendVoiceFrame(bytes),
+      (err) => appendLog(`[ptt] stream error: ${err}`),
+    )
     pttRecorderRef.current = recorder
-    await recorder.start()
+    try {
+      await recorder.start()
+      appendLog(`[ptt] recording -> ${peer.deviceId}`)
+    } catch (err) {
+      appendLog(`[ptt] failed to start: ${err}`)
+      pttRecorderRef.current = null
+    }
   }
 
   function stopPtt() {
@@ -240,10 +250,20 @@ export default function App() {
                 {peer.deviceId} · secure {peer.remoteFingerprint}
               </span>
               <button
-                onMouseDown={() => startPtt(peer)}
-                onMouseUp={stopPtt}
-                onTouchStart={() => startPtt(peer)}
-                onTouchEnd={stopPtt}
+                // Pointer Events only — deliberately not mouse+touch handlers
+                // side by side. On a real touchscreen a touch also
+                // synthesizes a trailing mousedown/mouseup for legacy-code
+                // compatibility, so mouse+touch handlers together fire
+                // startPtt() twice per physical press: two PushToTalkRecorder
+                // instances race, and the first one's stop() closes the
+                // AudioEncoder out from under the second one's still-running
+                // encode() loop (surfaces as "Cannot call 'encode' on a
+                // closed codec"). Pointer Events unify touch/mouse/pen into
+                // one event stream with no such duplication.
+                onPointerDown={() => startPtt(peer)}
+                onPointerUp={stopPtt}
+                onPointerLeave={stopPtt}
+                onPointerCancel={stopPtt}
               >
                 Hold to talk
               </button>

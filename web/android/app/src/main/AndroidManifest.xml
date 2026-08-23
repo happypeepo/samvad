@@ -24,8 +24,16 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- Voice capture for both the internet-tier call and BLE push-to-talk -->
+    <!-- Voice capture for both the internet-tier call and BLE push-to-talk.
+         Capacitor's WebView permission bridge (BridgeWebChromeClient
+         .onPermissionRequest) requests RECORD_AUDIO and
+         MODIFY_AUDIO_SETTINGS together for getUserMedia's audio capture —
+         omitting either one makes the combined grant fail and the whole
+         WebView-level PermissionRequest gets denied, surfacing to JS as a
+         bare NotAllowedError with no indication which permission was the
+         actual problem. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
     <application

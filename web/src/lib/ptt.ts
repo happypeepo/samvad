@@ -25,9 +25,11 @@ export class PushToTalkRecorder {
   private reader: ReadableStreamDefaultReader<AudioData> | null = null
   private recording = false
   private send: (bytes: Uint8Array) => Promise<void>
+  private onError?: (err: unknown) => void
 
-  constructor(send: (bytes: Uint8Array) => Promise<void>) {
+  constructor(send: (bytes: Uint8Array) => Promise<void>, onError?: (err: unknown) => void) {
     this.send = send
+    this.onError = onError
   }
 
   async start() {
@@ -39,7 +41,10 @@ export class PushToTalkRecorder {
     const processor = new MediaStreamTrackProcessor({ track: this.track })
     this.reader = processor.readable.getReader()
     this.recording = true
-    this.pump()
+    // Fire-and-forget by design (start() shouldn't block on the whole
+    // recording session) — but that means an error thrown mid-stream had
+    // nowhere to go. Route it out explicitly instead of losing it.
+    this.pump().catch((err) => this.onError?.(err))
   }
 
   private async pump() {
