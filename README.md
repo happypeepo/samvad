@@ -76,3 +76,10 @@ in only touches that one file.
   multi-hop flooding relay across a larger mesh.
 - The Noise identity keypair is stored in browser `localStorage`, keyed
   per-origin — clearing app data or reinstalling generates a new identity.
+- On at least one tested chipset, running both BLE roles (central +
+  peripheral) concurrently on the same device silently hangs the GATT
+  connection on the central side — the connection succeeds at the OS level,
+  but the JS-visible `connect()` promise never resolves. A per-device role
+  selector (Both / Peripheral only / Central only) in the BLE panel works
+  around this reliably; confirmed working end-to-end (discovery, GATT
+  connect, Noise handshake) on real hardware with roles isolated.

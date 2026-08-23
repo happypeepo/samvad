@@ -7,7 +7,17 @@
     <!-- Legacy Bluetooth permissions, needed on API < 31 -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+
+    <!-- Deliberately NOT capped with maxSdkVersion=30: BLUETOOTH_SCAN below
+         carries `neverForLocation`, so the OS itself doesn't require this to
+         be *granted* for scanning to work on API 31+ — but a maxSdkVersion
+         cap makes the manifest declaration itself vanish entirely for a
+         device above that level, and @capacitor-community/bluetooth-le's own
+         permission bookkeeping checks for its literal presence regardless of
+         API level. Capping it here made requestLEScan() fail outright on
+         Android 12+ with "Missing ACCESS_FINE_LOCATION" even though nothing
+         actually needed the location grant at runtime. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!-- API 31+ (Android 12+) granular Bluetooth runtime permissions -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="s" />

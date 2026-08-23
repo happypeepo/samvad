@@ -145,7 +145,8 @@ header h1 {
   margin-bottom: 0;
 }
 
-input {
+input,
+select {
   flex: 1;
   background: var(--bg);
   border: 1px solid var(--line);
@@ -155,6 +156,9 @@ input {
   font-size: 0.82rem;
   letter-spacing: 0.02em;
   border-radius: 0;
+}
+select:disabled {
+  opacity: 0.5;
 }
 input::placeholder {
   color: var(--fg-faint);

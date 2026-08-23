@@ -11,6 +11,18 @@
 // Whichever side discovers and connects (central) is the Noise initiator;
 // whichever side accepts the incoming connection (peripheral) is the
 // responder — the same convention lib/webrtc.ts uses for the internet tier.
+//
+// KNOWN HARDWARE LIMITATION (confirmed on real devices, not theoretical):
+// on at least one tested chipset, a device running both roles concurrently
+// silently drops the GATT connection callback on the central side — the
+// connection succeeds at the OS level (confirmed from the peripheral's
+// perspective) but the central's own connect() promise never resolves or
+// rejects, hanging forever with no error. Isolating each device to a single
+// role (see the `peripheral`/`central` flags on start(), surfaced in the UI
+// as a role selector) reliably works around it. Kept `both` as the default
+// here regardless, since dual-role is the architecturally correct behavior
+// for a real mesh — the single-role selector exists as a fallback for
+// hardware where concurrent dual-role turns out to be unreliable.
 import { Buffer } from 'buffer'
 import { BleClient, type ScanResult } from '@capacitor-community/bluetooth-le'
 import {
@@ -66,15 +78,24 @@ export class BleTier {
     this.events.onLog?.(line)
   }
 
-  async start() {
+  /**
+   * By default a device runs both GATT roles at once (see the module
+   * comment). Some chipsets appear to drop the GATT connection callback
+   * when a device is simultaneously advertising its own service and
+   * connecting out to a peer's — pass `{ peripheral: false }` or
+   * `{ central: false }` to force a single role, as a workaround on
+   * hardware where that turns out to be a real limitation.
+   */
+  async start(opts: { peripheral?: boolean; central?: boolean } = {}) {
+    const { peripheral = true, central = true } = opts
     // Sequential, not Promise.all: each half triggers its own independent
     // Android runtime-permission request (this plugin's advertise/connect,
     // @capacitor-community/bluetooth-le's scan/connect/location). Two
     // concurrent permission-dialog flows from the same app is a known
     // source of races on Android — a callback can fire against a stale
     // permission snapshot mid-flight. Serializing avoids it entirely.
-    await this.startPeripheral()
-    await this.startCentral()
+    if (peripheral) await this.startPeripheral()
+    if (central) await this.startCentral()
   }
 
   async stop() {
@@ -124,7 +145,9 @@ export class BleTier {
   // ---- central role: scan + connect out to peripherals -------------------
 
   private async startCentral() {
+    this.log('[central] initializing...')
     await BleClient.initialize()
+    this.log('[central] initialized, requesting scan...')
     this.scanning = true
     await BleClient.requestLEScan({ services: [SAMVAD_SERVICE_UUID] }, (result) =>
       this.onScanResult(result),

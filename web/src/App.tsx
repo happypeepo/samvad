@@ -39,6 +39,7 @@ export default function App() {
 
   // --- BLE tier state ---
   const [blePeers, setBlePeers] = useState<BlePeer[]>([])
+  const [bleRole, setBleRole] = useState<'both' | 'peripheral' | 'central'>('both')
   const bleTierRef = useRef<BleTier | null>(null)
   const pttRecorderRef = useRef<PushToTalkRecorder | null>(null)
   const pttPlayersRef = useRef<Map<string, PushToTalkPlayer>>(new Map())
@@ -151,7 +152,14 @@ export default function App() {
       },
     })
     bleTierRef.current = ble
-    await ble.start()
+    try {
+      await ble.start({
+        peripheral: bleRole === 'both' || bleRole === 'peripheral',
+        central: bleRole === 'both' || bleRole === 'central',
+      })
+    } catch (err) {
+      appendLog(`BLE tier error: ${err}`)
+    }
   }
 
   async function startPtt(peer: BlePeer) {
@@ -212,6 +220,17 @@ export default function App() {
 
       <section className="panel">
         <h2>BLE mesh tier — push to talk</h2>
+        <div className="row">
+          <select
+            value={bleRole}
+            disabled={!!bleTierRef.current}
+            onChange={(e) => setBleRole(e.target.value as typeof bleRole)}
+          >
+            <option value="both">Both roles (default)</option>
+            <option value="peripheral">Peripheral only (advertise)</option>
+            <option value="central">Central only (scan)</option>
+          </select>
+        </div>
         <button onClick={toggleBleTier}>{bleTierRef.current ? 'Stop BLE' : 'Start BLE'}</button>
         <ul className="peer-list">
           {blePeers.map((peer) => (
