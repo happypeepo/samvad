@@ -1,0 +1,269 @@
+/* Monochrome / sharp-edged / geometric console aesthetic. No color hue
+   anywhere — state is communicated by weight, fill, border style and
+   bracketed labels instead of color, which also happens to hold up fine
+   for colorblind users and low-light field conditions. */
+:root {
+  color-scheme: dark;
+  --bg: #000000;
+  --bg-panel: #0a0a0a;
+  --fg: #f2f2f2;
+  --fg-dim: #8f8f8f;
+  --fg-faint: #4d4d4d;
+  --line: #2b2b2b;
+  --line-strong: #f2f2f2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Victor Mono', ui-monospace, monospace;
+  font-optical-sizing: auto;
+}
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ---- header ------------------------------------------------------- */
+
+header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+}
+
+.subtitle {
+  color: var(--fg-dim);
+  font-size: 0.78rem;
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
+/* bracketed status tag — solid border once resolved, dashed while searching */
+.tier-badge {
+  display: inline-block;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid var(--line-strong);
+}
+.tier-badge::before {
+  content: '// ';
+  color: var(--fg-faint);
+}
+.tier-searching {
+  border-style: dashed;
+  color: var(--fg-dim);
+  border-color: var(--fg-dim);
+}
+
+/* ---- panels --------------------------------------------------------
+   Two opposite corners get a bracket mark instead of a full rounded
+   card — a minimal HUD/schematic reference rather than a boxed widget. */
+
+.panel {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  padding: 1.1rem 1.1rem 1.25rem;
+}
+.panel::before,
+.panel::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+}
+.panel::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--fg);
+  border-left: 2px solid var(--fg);
+}
+.panel::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid var(--fg);
+  border-right: 2px solid var(--fg);
+}
+
+.panel h2 {
+  margin: 0 0 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--fg-dim);
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.status-line {
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  margin-top: 0.75rem;
+  color: var(--fg-dim);
+}
+.status-line b {
+  color: var(--fg);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---- form controls --------------------------------------------------- */
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.row:last-of-type {
+  margin-bottom: 0;
+}
+
+input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  padding: 0.55rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  border-radius: 0;
+}
+input::placeholder {
+  color: var(--fg-faint);
+  font-style: italic;
+}
+input:focus {
+  outline: none;
+  border-color: var(--line-strong);
+}
+
+button {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--line-strong);
+  padding: 0.55rem 1rem;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background 80ms linear, color 80ms linear;
+}
+button:hover:not(:disabled) {
+  background: var(--fg);
+  color: #000;
+}
+button:active:not(:disabled) {
+  background: var(--fg-dim);
+  color: #000;
+}
+button:disabled {
+  opacity: 0.35;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+/* ---- fingerprints ------------------------------------------------- */
+
+.fingerprints {
+  margin-top: 0.9rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  border: 1px dashed var(--line);
+  padding: 0.7rem 0.8rem;
+}
+.fingerprints div {
+  padding: 0.1rem 0;
+}
+.fingerprints .hint {
+  color: var(--fg-dim);
+  font-style: italic;
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+
+/* ---- BLE peer list -------------------------------------------------- */
+
+.peer-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.peer-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.7rem;
+}
+.peer-list .peer-role {
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  margin-right: 0.4rem;
+}
+.peer-list button {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+/* ---- log panel -------------------------------------------------------- */
+
+.log-panel pre {
+  margin: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--fg-dim);
+  white-space: pre-wrap;
+}
+.log-panel pre::after {
+  content: '▉';
+  color: var(--fg);
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
