@@ -259,7 +259,15 @@ export class BleTier {
     if (!peer) return
     for (const piece of chunk(envelope, MAX_BLE_CHUNK_BYTES)) {
       if (peer.role === 'central') {
-        await BleClient.write(
+        // writeWithoutResponse, not write: the GATT link already delivers
+        // writes in order and reliably at the link layer (that's what makes
+        // plain length-prefixed framing safe — see framing.ts), so the
+        // extra ATT-level write-response round trip buys no correctness,
+        // only latency. At 10-20ms audio frame cadence that round trip
+        // (bounded by the connection interval, commonly 30-50ms) was the
+        // dominant bottleneck — voice capture was being throttled to
+        // however fast acks came back, not real time.
+        await BleClient.writeWithoutResponse(
           deviceId,
           SAMVAD_SERVICE_UUID,
           SAMVAD_RX_CHARACTERISTIC_UUID,

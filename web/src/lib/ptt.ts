@@ -9,7 +9,12 @@ import { PlaceholderLowBitrateCodec, SAMVAD_CODEC_SAMPLE_RATE, type CodecFormat,
 // sampleRate][1 byte channels][opus data]. Format travels with every frame
 // (instead of being assumed) because the sender's actual capture format
 // depends on what its mic hardware will give up — see PushToTalkRecorder.start.
-function packFrame(frame: EncodedFrame, format: { sampleRate: number; numberOfChannels: number }): Uint8Array {
+// Exported (alongside mergeAudioChunks/TARGET_FRAME_DURATION_US below) only
+// so codec-test.ts — a synthetic-source loopback harness with no mic/BLE
+// dependency — can exercise the exact same batching/pack/decode logic this
+// module uses, instead of a hand-rolled reimplementation that could mask
+// bugs by drifting from the real thing.
+export function packFrame(frame: EncodedFrame, format: { sampleRate: number; numberOfChannels: number }): Uint8Array {
   const out = new Uint8Array(9 + frame.data.byteLength)
   const view = new DataView(out.buffer)
   view.setUint32(0, frame.timestampUs >>> 0, true)
@@ -27,6 +32,36 @@ function unpackFrame(bytes: Uint8Array): EncodedFrame & { sampleRate: number; nu
   return { timestampUs, sampleRate, numberOfChannels, data: bytes.slice(9) }
 }
 
+// Opus's standard voice frame size. A single raw chunk straight off
+// MediaStreamTrackProcessor can be much shorter than this (10ms on real
+// hardware we've tested on) — encoding each one independently produces
+// payloads too small to carry much beyond noise at voice bitrates, and
+// doubles+ the number of BLE writes needed for the same audio. Buffer raw
+// chunks up to this duration before handing them to the encoder.
+export const TARGET_FRAME_DURATION_US = 20_000
+
+// Concatenates consecutive raw mic chunks into one longer chunk. Only reads
+// plane 0 (mono) — matches the same single-channel assumption
+// PushToTalkPlayer.playFrame already makes on the decode side.
+export function mergeAudioChunks(chunks: AudioData[]): AudioData {
+  const first = chunks[0]
+  const merged = new Float32Array(chunks.reduce((sum, c) => sum + c.numberOfFrames, 0))
+  let offset = 0
+  for (const c of chunks) {
+    c.copyTo(merged.subarray(offset, offset + c.numberOfFrames), { planeIndex: 0, format: 'f32-planar' })
+    offset += c.numberOfFrames
+    c.close()
+  }
+  return new AudioData({
+    format: 'f32-planar',
+    sampleRate: first.sampleRate,
+    numberOfFrames: merged.length,
+    numberOfChannels: first.numberOfChannels,
+    timestamp: first.timestamp,
+    data: merged,
+  })
+}
+
 export class PushToTalkRecorder {
   private codec: PlaceholderLowBitrateCodec | null = null
   private format: CodecFormat | null = null
@@ -36,6 +71,8 @@ export class PushToTalkRecorder {
   private send: (bytes: Uint8Array) => Promise<void>
   private onError?: (err: unknown) => void
   private pumpDone: Promise<void> = Promise.resolve()
+  private pendingRawChunks: AudioData[] = []
+  private rawChunksPerFrame = 1
 
   constructor(send: (bytes: Uint8Array) => Promise<void>, onError?: (err: unknown) => void) {
     this.send = send
@@ -63,25 +100,47 @@ export class PushToTalkRecorder {
     while (this.recording && this.reader) {
       const { value, done } = await this.reader.read()
       if (done || !value) break
-      if (!this.codec) {
+
+      if (!this.codec && this.pendingRawChunks.length === 0) {
         // channelCount/sampleRate on getUserMedia are only hints, and even
         // the negotiated MediaStreamTrack settings don't guarantee the exact
         // chunk shape WebCodecs will deliver — real hardware handed back
-        // 48kHz mono in 480-sample (10ms) chunks here, not the 20ms frame
-        // Opus voice presets assume. Configuring the encoder for anything
-        // other than what actually arrives makes it reject every chunk with
-        // "incompatible with codec parameters", so build it from the first
-        // real chunk instead of guessing upfront.
+        // 48kHz mono in 480-sample (10ms) chunks here. Figure out how many
+        // of these raw chunks it takes to reach Opus's standard ~20ms voice
+        // frame, so we're not encoding (and BLE-writing) each tiny 10ms
+        // sliver on its own.
+        const rawFrameDurationUs = Math.round((value.numberOfFrames / value.sampleRate) * 1_000_000)
+        this.rawChunksPerFrame = Math.max(1, Math.round(TARGET_FRAME_DURATION_US / rawFrameDurationUs))
+      }
+
+      this.pendingRawChunks.push(value)
+      if (this.pendingRawChunks.length < this.rawChunksPerFrame) continue
+
+      const batch = mergeAudioChunks(this.pendingRawChunks)
+      this.pendingRawChunks = []
+
+      if (!this.codec) {
+        // Configuring the encoder for anything other than what actually
+        // arrives makes it reject every chunk with "incompatible with codec
+        // parameters" — build it from the first real (now-batched) chunk
+        // instead of guessing upfront.
         this.format = {
-          sampleRate: value.sampleRate,
-          numberOfChannels: value.numberOfChannels,
-          frameDurationUs: Math.round((value.numberOfFrames / value.sampleRate) * 1_000_000),
+          sampleRate: batch.sampleRate,
+          numberOfChannels: batch.numberOfChannels,
+          frameDurationUs: Math.round((batch.numberOfFrames / batch.sampleRate) * 1_000_000),
         }
         this.codec = new PlaceholderLowBitrateCodec(this.format)
       }
-      const frames = await this.codec.encode(value)
+      const frames = await this.codec.encode(batch)
       for (const frame of frames) await this.send(packFrame(frame, this.format!))
     }
+    // Any leftover raw chunks short of a full frame are dropped, not
+    // encoded — the encoder is locked to a fixed frame duration once
+    // configured, and a short final chunk would hit the same
+    // "incompatible with codec parameters" mismatch this batching exists to
+    // avoid. Losing under one frame's worth of trailing audio is inaudible.
+    for (const leftover of this.pendingRawChunks) leftover.close()
+    this.pendingRawChunks = []
   }
 
   stop() {

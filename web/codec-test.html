@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SAMVAD codec loopback test</title>
+  </head>
+  <body style="font-family: monospace; max-width: 640px; margin: 2rem auto">
+    <h1>Codec loopback test (no BLE)</h1>
+    <p>
+      Wires <code>PushToTalkRecorder</code> straight into
+      <code>PushToTalkPlayer</code> — mic → encode → decode → speakers —
+      bypassing BLE entirely. Validates the frame-batching fix and lets you
+      actually hear the encoded/decoded quality.
+    </p>
+    <button id="start">Start (hold mic open)</button>
+    <button id="stop">Stop</button>
+    <pre
+      id="log"
+      style="white-space: pre-wrap; height: 300px; overflow: auto; border: 1px solid #ccc; padding: 8px"
+    ></pre>
+    <script type="module" src="/src/codec-test.ts"></script>
+  </body>
+</html>
