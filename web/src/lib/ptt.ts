@@ -44,7 +44,12 @@ export const TARGET_FRAME_DURATION_US = 20_000
 // plane 0 (mono) — matches the same single-channel assumption
 // PushToTalkPlayer.playFrame already makes on the decode side.
 export function mergeAudioChunks(chunks: AudioData[]): AudioData {
-  const first = chunks[0]
+  // Read whatever we need from the first chunk *before* the loop below
+  // closes it — a closed AudioData's properties (sampleRate,
+  // numberOfChannels, timestamp) reset to invalid/zero, so reading them
+  // off `first` after close() throws exactly the "numberOfChannels must
+  // be greater than 0" error this comment is now next to.
+  const { sampleRate, numberOfChannels, timestamp } = chunks[0]
   const merged = new Float32Array(chunks.reduce((sum, c) => sum + c.numberOfFrames, 0))
   let offset = 0
   for (const c of chunks) {
@@ -54,10 +59,10 @@ export function mergeAudioChunks(chunks: AudioData[]): AudioData {
   }
   return new AudioData({
     format: 'f32-planar',
-    sampleRate: first.sampleRate,
+    sampleRate,
     numberOfFrames: merged.length,
-    numberOfChannels: first.numberOfChannels,
-    timestamp: first.timestamp,
+    numberOfChannels,
+    timestamp,
     data: merged,
   })
 }
